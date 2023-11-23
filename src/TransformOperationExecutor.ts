@@ -54,15 +54,29 @@ export class TransformOperationExecutor {
             targetType.options.discriminator.subTypes
           ) {
             if (this.transformationType === TransformationType.PLAIN_TO_CLASS) {
-              realTargetType = targetType.options.discriminator.subTypes.find(
-                subType =>
-                  subType.name === subValue[(targetType as { options: TypeOptions }).options.discriminator.property]
-              );
+              if (targetType.options.discriminator.secondProperty === undefined) {
+                realTargetType = targetType.options.discriminator.subTypes.find(
+                  subType =>
+                    subType.name === subValue[(targetType as { options: TypeOptions }).options.discriminator.property]
+                );
+              } else {
+                realTargetType = targetType.options.discriminator.subTypes.find(
+                  subType =>
+                    subType.name ===
+                      subValue[(targetType as { options: TypeOptions }).options.discriminator.property] &&
+                    subType.secondName ===
+                      subValue[(targetType as { options: TypeOptions }).options.discriminator?.secondProperty]
+                );
+              }
+
               const options: TypeHelpOptions = { newObject: newValue, object: subValue, property: undefined };
               const newType = targetType.typeFunction(options);
+
               realTargetType === undefined ? (realTargetType = newType) : (realTargetType = realTargetType.value);
               if (!targetType.options.keepDiscriminatorProperty)
                 delete subValue[targetType.options.discriminator.property];
+              if (targetType.options.discriminator.secondProperty !== undefined)
+                delete subValue[targetType.options.discriminator.secondProperty];
             }
 
             if (this.transformationType === TransformationType.CLASS_TO_CLASS) {
@@ -230,7 +244,10 @@ export class TransformOperationExecutor {
                 if (this.transformationType === TransformationType.PLAIN_TO_CLASS) {
                   type = metadata.options.discriminator.subTypes.find(subType => {
                     if (subValue && subValue instanceof Object && metadata.options.discriminator.property in subValue) {
-                      return subType.name === subValue[metadata.options.discriminator.property];
+                      return (
+                        subType.name === subValue[metadata.options.discriminator.property] &&
+                        subType.secondName === subValue[metadata.options.discriminator.secondProperty]
+                      );
                     }
                   });
                   type === undefined ? (type = newType) : (type = type.value);
