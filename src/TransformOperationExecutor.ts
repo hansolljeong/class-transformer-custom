@@ -54,38 +54,35 @@ export class TransformOperationExecutor {
             targetType.options.discriminator.subTypes
           ) {
             if (this.transformationType === TransformationType.PLAIN_TO_CLASS) {
-              if (targetType.options.discriminator.secondProperty === undefined) {
-                realTargetType = targetType.options.discriminator.subTypes.find(
-                  subType =>
-                    subType.name === subValue[(targetType as { options: TypeOptions }).options.discriminator.property]
-                );
-              } else {
-                realTargetType = targetType.options.discriminator.subTypes.find(
-                  subType =>
-                    subType.name ===
-                      subValue[(targetType as { options: TypeOptions }).options.discriminator.property] &&
-                    subType.secondName ===
-                      subValue[(targetType as { options: TypeOptions }).options.discriminator?.secondProperty]
-                );
-              }
+              realTargetType = targetType.options.discriminator.subTypes.find(subType => {
+                // false인걸 찾았으면 false, 못찾았다면 undefined
+                const foundBoolean = subType.name
+                  .map(
+                    (element, idx) =>
+                      element === subValue[(targetType as { options: TypeOptions }).options.discriminator.property[idx]]
+                  )
+                  .find(e => e === false);
+                if (foundBoolean === false) {
+                  return false;
+                }
+                return true;
+              });
 
               const options: TypeHelpOptions = { newObject: newValue, object: subValue, property: undefined };
               const newType = targetType.typeFunction(options);
 
               realTargetType === undefined ? (realTargetType = newType) : (realTargetType = realTargetType.value);
               if (!targetType.options.keepDiscriminatorProperty)
-                delete subValue[targetType.options.discriminator.property];
-              if (targetType.options.discriminator.secondProperty !== undefined)
-                delete subValue[targetType.options.discriminator.secondProperty];
+                targetType.options.discriminator.property.forEach(property => delete subValue[property]);
             }
 
             if (this.transformationType === TransformationType.CLASS_TO_CLASS) {
               realTargetType = subValue.constructor;
             }
             if (this.transformationType === TransformationType.CLASS_TO_PLAIN) {
-              subValue[targetType.options.discriminator.property] = targetType.options.discriminator.subTypes.find(
-                subType => subType.value === subValue.constructor
-              ).name;
+              // subValue[targetType.options.discriminator.property] = targetType.options.discriminator.subTypes.find(
+              //   subType => subType.value === subValue.constructor
+              // ).name;
             }
           } else {
             realTargetType = targetType;
@@ -243,17 +240,28 @@ export class TransformOperationExecutor {
               if (!(value[valueKey] instanceof Array)) {
                 if (this.transformationType === TransformationType.PLAIN_TO_CLASS) {
                   type = metadata.options.discriminator.subTypes.find(subType => {
-                    if (subValue && subValue instanceof Object && metadata.options.discriminator.property in subValue) {
-                      return (
-                        subType.name === subValue[metadata.options.discriminator.property] &&
-                        subType.secondName === subValue[metadata.options.discriminator.secondProperty]
-                      );
+                    if (subValue && subValue instanceof Object) {
+                      // subType.name === subValue[metadata.options.discriminator.property]
+                      const foundBoolean = subType.name
+                        .map((name, idx) => name === subValue[metadata.options.discriminator.property[idx]])
+                        .find(e => e === false);
+
+                      if (foundBoolean === false) {
+                        return false;
+                      }
+                      return true;
                     }
                   });
                   type === undefined ? (type = newType) : (type = type.value);
                   if (!metadata.options.keepDiscriminatorProperty) {
-                    if (subValue && subValue instanceof Object && metadata.options.discriminator.property in subValue) {
-                      delete subValue[metadata.options.discriminator.property];
+                    if (
+                      subValue &&
+                      subValue instanceof Object
+                      // && !(metadata.options.discriminator.property
+                      //   .map((property) => property in subValue)
+                      //   .find((e) => e === false))
+                    ) {
+                      metadata.options.discriminator.property.forEach(property => delete subValue[property]);
                     }
                   }
                 }
@@ -261,11 +269,11 @@ export class TransformOperationExecutor {
                   type = subValue.constructor;
                 }
                 if (this.transformationType === TransformationType.CLASS_TO_PLAIN) {
-                  if (subValue) {
-                    subValue[metadata.options.discriminator.property] = metadata.options.discriminator.subTypes.find(
-                      subType => subType.value === subValue.constructor
-                    ).name;
-                  }
+                  // if (subValue) {
+                  //   subValue[metadata.options.discriminator.property] = metadata.options.discriminator.subTypes.find(
+                  //     subType => subType.value === subValue.constructor
+                  //   ).name;
+                  // }
                 }
               } else {
                 type = metadata;
