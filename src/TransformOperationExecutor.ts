@@ -53,30 +53,29 @@ export class TransformOperationExecutor {
             targetType.options.discriminator.property &&
             targetType.options.discriminator.subTypes
           ) {
+            const property = (targetType as { options: TypeOptions }).options.discriminator.property;
             if (this.transformationType === TransformationType.PLAIN_TO_CLASS) {
-              realTargetType = targetType.options.discriminator.subTypes.find(subType =>
-                subType.name.every(
-                  (name, idx) =>
-                    name === subValue[(targetType as { options: TypeOptions }).options.discriminator.property[idx]]
-                )
-              );
+              realTargetType = targetType.options.discriminator.subTypes.find(subType => {
+                return this.subTypePredicate(property, subType.name, subValue);
+              });
               const options: TypeHelpOptions = { newObject: newValue, object: subValue, property: undefined };
               const newType = targetType.typeFunction(options);
               realTargetType === undefined ? (realTargetType = newType) : (realTargetType = realTargetType.value);
-              if (!targetType.options.keepDiscriminatorProperty)
-                targetType.options.discriminator.property.forEach(property => delete subValue[property]);
+              if (!targetType.options.keepDiscriminatorProperty) {
+                const property = targetType.options.discriminator.property;
+                if (Array.isArray(property)) {
+                  property.forEach(property => delete subValue[property]);
+                } else {
+                  delete subValue[property];
+                }
+              }
             }
 
             if (this.transformationType === TransformationType.CLASS_TO_CLASS) {
               realTargetType = subValue.constructor;
             }
             if (this.transformationType === TransformationType.CLASS_TO_PLAIN) {
-              targetType.options.discriminator.property.forEach(
-                (property, idx) =>
-                  (subValue[property] = (targetType as { options: TypeOptions }).options.discriminator.subTypes.find(
-                    subType => subType.value === subValue.constructor
-                  ).name[idx])
-              );
+              this.assignSubTypeName(property, targetType.options.discriminator.subTypes, subValue);
             }
           } else {
             realTargetType = targetType;
@@ -232,16 +231,17 @@ export class TransformOperationExecutor {
               metadata.options.discriminator.subTypes
             ) {
               if (!(value[valueKey] instanceof Array)) {
+                const property = metadata.options.discriminator.property;
                 if (this.transformationType === TransformationType.PLAIN_TO_CLASS) {
                   type = metadata.options.discriminator.subTypes.find(subType => {
                     if (
                       subValue &&
                       subValue instanceof Object &&
-                      metadata.options.discriminator.property.every(property => property in subValue)
+                      (Array.isArray(property)
+                        ? property.every(property => property in subValue)
+                        : property in subValue)
                     ) {
-                      return subType.name.every(
-                        (name, idx) => name === subValue[metadata.options.discriminator.property[idx]]
-                      );
+                      return this.subTypePredicate(property, subType.name, subValue);
                     }
                   });
                   type === undefined ? (type = newType) : (type = type.value);
@@ -249,9 +249,15 @@ export class TransformOperationExecutor {
                     if (
                       subValue &&
                       subValue instanceof Object &&
-                      metadata.options.discriminator.property.every(property => property in subValue)
+                      (Array.isArray(property)
+                        ? property.every(property => property in subValue)
+                        : property in subValue)
                     ) {
-                      metadata.options.discriminator.property.forEach(property => delete subValue[property]);
+                      if (Array.isArray(property)) {
+                        property.forEach(property => delete subValue[property]);
+                      } else {
+                        delete subValue[property];
+                      }
                     }
                   }
                 }
@@ -260,12 +266,7 @@ export class TransformOperationExecutor {
                 }
                 if (this.transformationType === TransformationType.CLASS_TO_PLAIN) {
                   if (subValue) {
-                    metadata.options.discriminator.property.forEach(
-                      (property, idx) =>
-                        (subValue[property] = metadata.options.discriminator.subTypes.find(
-                          subType => subType.value === subValue.constructor
-                        ).name[idx])
-                    );
+                    this.assignSubTypeName(property, metadata.options.discriminator.subTypes, subValue);
                   }
                 }
               } else {
@@ -561,5 +562,51 @@ export class TransformOperationExecutor {
     if (!groups) return true;
 
     return this.options.groups.some(optionGroup => groups.includes(optionGroup));
+  }
+
+  private subTypePredicate(property: string | string[], subTypeName: any | any[], subValue: any): any {
+    if (Array.isArray(property) !== Array.isArray(subTypeName)) {
+      throw new Error(
+        `property and subTypeName should be same type, property was <<${JSON.stringify(
+          property
+        )}>>, subTypeName was <<${JSON.stringify(subTypeName)}>>`
+      );
+    }
+    const properties = Array.isArray(property) ? property : [property];
+    const subTypeNames = Array.isArray(subTypeName) ? subTypeName : [subTypeName];
+    if (properties.length !== subTypeNames.length) {
+      throw new Error(
+        `getRealTargetType: properties.length should be equal subTypeNames.length, properties was <<${JSON.stringify(
+          properties
+        )}>>, subTypeNames was <<${JSON.stringify(subTypeNames)}>>`
+      );
+    }
+    return properties.every((property, index) => subValue[property] === subTypeNames[index]);
+  }
+
+  private assignSubTypeName(property: string | string[], subTypes: any[], subValue: any): void {
+    const isAllSubTypeNamesArray = subTypes.every(subType => Array.isArray(subType.name));
+    const isAllSubTypeNamesNotArray = subTypes.every(subType => !Array.isArray(subType.name));
+    const everyTypeOfSubTypeNameAreEquals = isAllSubTypeNamesArray || isAllSubTypeNamesNotArray;
+
+    if (!everyTypeOfSubTypeNameAreEquals) {
+      throw new Error(`all of subType.name should be same type, subTypes was <<${JSON.stringify(subTypes)}>>`);
+    }
+
+    if (Array.isArray(property) !== isAllSubTypeNamesArray) {
+      throw new Error(
+        `property and all of subTypes.name should be same type, property was <<${JSON.stringify(
+          property
+        )}>>, subTypes was <<${JSON.stringify(subTypes)}>>`
+      );
+    }
+    const properties = Array.isArray(property) ? property : [property];
+    if (isAllSubTypeNamesNotArray) {
+      subTypes.forEach(subType => (subType.name = [subType.name]));
+    }
+
+    properties.forEach((property, index) => {
+      subValue[property] = subTypes.find(subType => subType.value === subValue.constructor).name[index];
+    });
   }
 }
